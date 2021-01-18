@@ -1,5 +1,5 @@
 # Differential Render based 3D Finger Reconstruction
-基于可微渲染器的三维手指重建
+三维手指识别
 
 # Requirements
 
