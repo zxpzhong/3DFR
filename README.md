@@ -1,4 +1,4 @@
-# Differential Render based 3D Finger Reconstruction
+# 3D Finger Recognition
 三维手指识别
 
 # Requirements
