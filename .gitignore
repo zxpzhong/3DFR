@@ -1,0 +1,13 @@
+__init__.py
+# data/
+.vscode/
+saved/
+__pycache__/
+outer_files/
+*.stl
+*.png
+*.gif
+# *.obj
+1.png
+data_loader/data/MNIST/
+
