@@ -40,5 +40,5 @@ class DR_FR_Model(nn.Module):
         输入: 点云 N*3
         输出: logit
         '''
-        logit = self.model(point)
-        return logit
+        feature,logit = self.model(point)
+        return feature,logit

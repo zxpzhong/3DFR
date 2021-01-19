@@ -57,7 +57,7 @@ class Trainer(BaseTrainer):
             data = data.to(self.device)
             target = target.to(self.device)
             self.optimizer.zero_grad()
-            output = self.model(data)
+            _,output = self.model(data)
             # Compute accuracy
             pred_label = torch.argmax(output, dim=1)
             right_ += torch.sum((pred_label == target).float()).cpu().item()
@@ -108,7 +108,7 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             for batch_idx, (data) in enumerate(tqdm(self.valid_data_loader)):
                 data = data.to(self.device)
-                output = self.model(data)
+                output,_ = self.model(data)
                 output = output.cpu()
                 for i in range(output.shape[0]):
                     features.append(output[i])
@@ -132,13 +132,13 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             for batch_idx, (data) in enumerate(tqdm(self.test_data_loader)):
                 data = data.to(self.device)
-                output = self.model(data)
+                output,_ = self.model(data)
                 output = output.cpu()
                 for i in range(output.shape[0]):
                     features.append(output[i])
         distances = []
         label = []
-        for item in self.valid_data_loader.dataset.query:
+        for item in self.test_data_loader.dataset.query:
             dis = F.cosine_similarity(features[item[0]].unsqueeze(0), features[item[1]].unsqueeze(0))
             distances.append(dis)
             label.append(item[2])
