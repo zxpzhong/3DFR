@@ -38,8 +38,8 @@ class Trainer(BaseTrainer):
         self.lr_scheduler = lr_scheduler
         self.log_step = 50*int(np.sqrt(data_loader.batch_size))
 
-        self.train_metrics = MetricTracker('loss','loss_img','loss_mask','loss_edge','loss_flat','loss_lap','loss_cd', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
-        self.valid_metrics = MetricTracker('loss', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.train_metrics = MetricTracker('loss','loss_cls','acc', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
+        self.valid_metrics = MetricTracker('loss','valid_eer','test_eer', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
 
     def _train_epoch(self, epoch):
         """
@@ -51,37 +51,20 @@ class Trainer(BaseTrainer):
         self.model.train()
         self.train_metrics.reset()
         
-        for batch_idx, (data, target, mask) in enumerate(tqdm(self.data_loader)):
-            data = [item.to(self.device) for item in data]
-            mask = [item.to(self.device) for item in mask]
+        sum_ = 0
+        right_ = 0
+        for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
+            data = data.to(self.device)
+            target = target.to(self.device)
             self.optimizer.zero_grad()
-            output,rec_mesh,img_probs,faces,new_mesh,input_texture = self.model(data)
-            loss_img = 0
-            loss_mask = 0
-            loss_lap = 0
-            loss_edge = 0
-            loss_flat = 0
-            loss_cd = 0
-            for i in range(VIEW_NUMS):
-                img = output[i]
-                # colored image L1 loss
-                loss_img += L1(img, data[i])
-                # 轮廓mask IOU L1/L2
-                loss_mask += L1(img_probs[i],mask[i])
-            # Lap平滑损失
-            loss_lap+=mesh_laplacian_smoothing(new_mesh)
-            # 边长损失
-            loss_edge+=mesh_edge_loss(new_mesh)
-            # 法向损失
-            loss_flat+=mesh_normal_consistency(new_mesh)
-            # CD损失
-            # for i in range(rec_mesh.shape[0]):
-            #     # 生成物体和参考圆柱之间的CD损失
-            #     loss_cd += kal.metrics.point.chamfer_distance(mesh_trans.vertices,rec_mesh[i])
-            loss_mask/=VIEW_NUMS
-            loss_img/=VIEW_NUMS
-            loss_cd/=VIEW_NUMS
-            loss = loss_img+loss_mask+loss_lap+loss_edge+loss_flat+loss_cd
+            output = self.model(data)
+            # Compute accuracy
+            pred_label = torch.argmax(output, dim=1)
+            right_ += torch.sum((pred_label == target).float()).cpu().item()
+            sum_+=data.shape[0]
+            # 点云的分类损失
+            loss_cls = F.cross_entropy(output,target)
+            loss = loss_cls
             loss.backward()
             self.optimizer.step()
             # log
@@ -90,37 +73,19 @@ class Trainer(BaseTrainer):
                 step = (epoch - 1) * self.len_epoch + batch_idx
                 self.writer.set_step(step)
                 # 写入损失曲线
-                if type(loss_img) == type(loss): self.train_metrics.update('loss_img', loss_img.item())
-                if type(loss_mask) == type(loss): self.train_metrics.update('loss_mask', loss_mask.item())
-                if type(loss_lap) == type(loss): self.train_metrics.update('loss_lap', loss_lap.item())
-                if type(loss_edge) == type(loss): self.train_metrics.update('loss_edge', loss_edge.item())
-                if type(loss_flat) == type(loss): self.train_metrics.update('loss_flat', loss_flat.item())
-                if type(loss_cd) == type(loss): self.train_metrics.update('loss_cd', loss_cd.item())
+                if type(loss_cls) == type(loss): self.train_metrics.update('loss_cls', loss_cls.item())
                 self.train_metrics.update('loss', loss.item())
-                # 合成两张图像
-                shape = data[0].shape
-                input_img = torch.zeros([6,shape[1],shape[2],shape[3]])
-                output_img = torch.zeros([6,shape[1],shape[2],shape[3]])
-                # tb显示图像
-                for i in range(6):
-                    input_img[i] = data[i][0].cpu()
-                    output_img[i] = output[i][0].cpu().detach()
-                self.writer.add_image('input', make_grid(input_img, nrow=6, normalize=False))
-                self.writer.add_image('output', make_grid(output_img, nrow=6, normalize=False))
-                # 写入uvmap
-                self.writer.add_image('uvmap', make_grid(input_texture[0].cpu().detach().unsqueeze(0), nrow=1, normalize=False))
+                self.train_metrics.update('acc', right_/sum_)
                 # 控制台log
-                self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
+                self.logger.debug('Train Epoch: {} {} Loss: {:.6f} ACC : {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
-                    loss.item()))
-                # 保存为三维模型, point写入obj文件, face固定的, uv坐标值
-                save_mesh(rec_mesh[0].cpu().detach(),faces.long().cpu().detach(),os.path.join(self.config.obj_dir,'{}_{}_{}.obj'.format(epoch,batch_idx,step)))
-                # exit()
+                    loss.item(),
+                    right_/sum_))
             if batch_idx == self.len_epoch:
                 break
         log = self.train_metrics.result()
-        self.do_validation = False
+        # self.do_validation = False
         if self.do_validation and epoch%self.config['trainer']['save_period'] == 0:
             val_log = self._valid_epoch(epoch)
             log.update(**{'val_'+k : v for k, v in val_log.items()})
@@ -138,44 +103,54 @@ class Trainer(BaseTrainer):
         """
         self.model.eval()
         self.valid_metrics.reset()
+        # 使用当前模型跑完整个验证集
+        features = []
         with torch.no_grad():
-            if self.veri_mode == False:
-                for batch_idx, (data, target) in enumerate(tqdm(self.valid_data_loader)):
-                    data, target = data.to(self.device), target.to(self.device)
-
-                    output = self.model(data)
-                    loss = self.criterion(output, target)
-
-                    self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
-                    self.valid_metrics.update('loss', loss.item())
-                    for met in self.metric_ftns:
-                        self.valid_metrics.update(met.__name__, met(output, target))
-                    self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
-            else:
-                distances = []
-                distance_data_list = []
-                labels = []
-                for batch_idx, (data1,data2, target) in enumerate(self.valid_data_loader):
-                    data1,data2, target = data1.to(self.device),data2.to(self.device), target.to(self.device)
-
-                    output1 = self.model.extract_feature(data1)
-                    output2 = self.model.extract_feature(data2)
-                    dis = F.cosine_similarity(output1, output2).cpu()
-                    distances.append(dis)
-                    distance_data_list.append(np.array(dis))
-                    labels.append(target)
-                    
-                # cat all distances
-                distances = torch.cat(distances)
-                # cat all labels
-                label = torch.cat(labels)
-                # cal eer
-                intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final,eer, bestThresh, minV = calc_eer(distances, label)
-                self.logger.debug('eer : {}, bestThresh : {},'.format(eer,bestThresh))
-                self.logger.debug("intra_cnt is : {} , inter_cnt is {} , intra_len is {} , inter_len is {}".format(intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final))
-                self.writer.set_step((epoch - 1), 'valid')
-                self.valid_metrics.update('loss', eer)
-                self.writer.add_image('input', make_grid(data1.cpu(), nrow=8, normalize=True))
+            for batch_idx, (data) in enumerate(tqdm(self.valid_data_loader)):
+                data = data.to(self.device)
+                output = self.model(data)
+                output = output.cpu()
+                for i in range(output.shape[0]):
+                    features.append(output[i])
+        
+        # 使用遍历取得EER阈值
+        # 构建distances和label列表
+        # 根据数据集的查询表,构建对应的距离和标签
+        distances = []
+        label = []
+        for item in self.valid_data_loader.dataset.query:
+            dis = F.cosine_similarity(features[item[0]].unsqueeze(0), features[item[1]].unsqueeze(0))
+            distances.append(dis)
+            label.append(item[2])
+        
+        intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final,valid_eer, bestThresh, minV = calc_eer(distances, label)
+        self.logger.debug('valid_eer : {}, bestThresh : {},'.format(valid_eer,bestThresh))
+        self.logger.debug("intra_cnt is : {} , inter_cnt is {} , intra_len is {} , inter_len is {}".format(intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final))
+        
+        # 遍历测试集,获取所有特征
+        features = []
+        with torch.no_grad():
+            for batch_idx, (data) in enumerate(tqdm(self.test_data_loader)):
+                data = data.to(self.device)
+                output = self.model(data)
+                output = output.cpu()
+                for i in range(output.shape[0]):
+                    features.append(output[i])
+        distances = []
+        label = []
+        for item in self.valid_data_loader.dataset.query:
+            dis = F.cosine_similarity(features[item[0]].unsqueeze(0), features[item[1]].unsqueeze(0))
+            distances.append(dis)
+            label.append(item[2])
+        intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final,test_eer, bestThresh, minV = calc_eer(distances, label ,[bestThresh])
+        self.logger.debug('test_eer : {}, bestThresh : {},'.format(test_eer,bestThresh))
+        self.logger.debug("intra_cnt is : {} , inter_cnt is {} , intra_len is {} , inter_len is {}".format(intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final))
+        
+        # tensorboard操作
+        self.writer.set_step((epoch - 1), 'valid')
+        self.valid_metrics.update('valid_eer', valid_eer)
+        self.valid_metrics.update('test_eer', test_eer)
+        
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')

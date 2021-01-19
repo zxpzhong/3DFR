@@ -9,10 +9,11 @@ import pandas as pd
 from torchvision import transforms as T
 from PIL import Image
 import numpy as np
-
+import kaolin as kal
 from torchvision import datasets, transforms
 from base import BaseDataLoader
 
+import trimesh
 def img_open(path):
     img = Image.open(path)
     array = np.array(img)
@@ -21,12 +22,17 @@ def img_open(path):
     img = Image.fromarray(array, mode='RGB')
     return img
 
-class LFMB_3DFB_Pictures_Seged_Rectified(BaseDataLoader):
+class LFMB_3DFB_Pictures_Seged_Rectified_Train(BaseDataLoader):
     def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1):
         self.data_dir = data_dir
-        self.dataset = Train_Dataset('/home/data/finger_vein/LFMB-3DFB_Pictures_Seged_Rectified_640_400/',self.data_dir)
+        self.dataset = Train_Dataset("/home/zf/vscode/3d/DR_3DFM/saved/obj/pytorch3duvmap/0118_210807/",self.data_dir)
         super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
+class LFMB_3DFB_Pictures_Seged_Rectified_Test(BaseDataLoader):
+    def __init__(self, data_dir, batch_size, shuffle=True, validation_split=0.0, num_workers=1):
+        self.data_dir = data_dir
+        self.dataset = Test_Dataset("/home/zf/vscode/3d/DR_3DFM/saved/obj/pytorch3duvmap/0118_210807/",self.data_dir)
+        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
 
 transform = T.Compose([
     # T.Resize([256, 256]),
@@ -56,9 +62,12 @@ class Train_Dataset(torch.utils.data.Dataset):
         self.root = root
         handle = open(train_file)
         lines = handle.readlines()
-        self.prefixs = list(set([item.split(',')[2] for item in lines[1:]]))
-        self.prefixs.sort()
+        self.prefixs = [item.split(',')[2] for item in lines[1:]]
+        self.labels = [item.split(',')[3] for item in lines[1:]]
+        
+        # self.prefixs.sort()
         # self.prefixs = ['0001_2_01']
+        # 构建label
         pass
 
     def __len__(self):
@@ -66,37 +75,41 @@ class Train_Dataset(torch.utils.data.Dataset):
         # return 1
 
     def __getitem__(self, index):
-        path = self.root+self.prefixs[index]
-        img1 = img_open(path+"_A.bmp")
-        img1 = transform_notrans(img1)
-        # img1 = torch.cat([img1, img1, img1], 0)
-        img2 = img_open(path+"_B.bmp")
-        img2 = transform_notrans(img2)
-        # img2 = torch.cat([img2, img2, img2], 0)
-        img3 = img_open(path+"_C.bmp")
-        img3 = transform_notrans(img3)
-        # img3 = torch.cat([img3, img3, img3], 0)
-        img4 = img_open(path+"_D.bmp")
-        img4 = transform_notrans(img4)
-        # img4 = torch.cat([img4, img4, img4], 0)
-        img5 = img_open(path+"_E.bmp")
-        img5 = transform_notrans(img5)
-        # img5 = torch.cat([img5, img5, img5], 0)
-        img6 = img_open(path+"_F.bmp")
-        img6 = transform_notrans(img6)
-        # img6 = torch.cat([img6, img6, img6], 0)
+        path = os.path.join(self.root,"{}.obj.obj".format(self.prefixs[index]))
+        # 加载三维模型
+        # mesh = trimesh.load_mesh(path)
+        mesh = kal.rep.TriangleMesh.from_obj(path, enable_adjacency=True)
+        vertices = mesh.vertices
+        # mesh.face_textures
+        return vertices,int(self.labels[index])
 
-        # pil_img = torch.cat([pil_img, pil_img, pil_img], 0)
-        # label = int(index)
-        img = [img1,img2,img3,img4,img5,img6]
-        mask1 = torch.where(torch.sum(img1,dim=0) > 0,torch.ones_like(torch.sum(img1,dim=0)) ,torch.zeros_like(torch.sum(img1,dim=0))).unsqueeze(-1)
-        mask2 = torch.where(torch.sum(img2,dim=0) > 0,torch.ones_like(torch.sum(img2,dim=0)) ,torch.zeros_like(torch.sum(img2,dim=0))).unsqueeze(-1)
-        mask3 = torch.where(torch.sum(img3,dim=0) > 0,torch.ones_like(torch.sum(img3,dim=0)) ,torch.zeros_like(torch.sum(img3,dim=0))).unsqueeze(-1)
-        mask4 = torch.where(torch.sum(img4,dim=0) > 0,torch.ones_like(torch.sum(img4,dim=0)) ,torch.zeros_like(torch.sum(img4,dim=0))).unsqueeze(-1)
-        mask5 = torch.where(torch.sum(img5,dim=0) > 0,torch.ones_like(torch.sum(img5,dim=0)) ,torch.zeros_like(torch.sum(img5,dim=0))).unsqueeze(-1)
-        mask6 = torch.where(torch.sum(img6,dim=0) > 0,torch.ones_like(torch.sum(img6,dim=0)) ,torch.zeros_like(torch.sum(img6,dim=0))).unsqueeze(-1)
-        mask = [mask1,mask2,mask3,mask4,mask5,mask6]
-        for i in range(len(img)):
-            img[i] = torch.cat([img[i],mask[i].permute(2,0,1)],dim=0)
-        # print(path)
-        return img,self.prefixs[index],mask
+
+class Test_Dataset(torch.utils.data.Dataset):
+    def __init__(self,root,train_file):
+        self.root = root
+        handle = open(train_file)
+        lines = handle.readlines()
+        
+        self.prefixs = list(set([item.split(',')[2] for item in lines[1:]]+[item.split(',')[3] for item in lines[1:]]))
+        self.labels = [item.split(',')[4] for item in lines[1:]]
+        
+        # 构建查询表
+        self.query = [[self.prefixs.index(item.split(',')[2]),self.prefixs.index(item.split(',')[3]),int(item.split(',')[4])] for item in lines[1:]]
+        
+        # self.prefixs.sort()
+        # self.prefixs = ['0001_2_01']
+        # 构建label
+        pass
+
+    def __len__(self):
+        return len(self.prefixs)
+        # return 1
+
+    def __getitem__(self, index):
+        path = os.path.join(self.root,"{}.obj.obj".format(self.prefixs[index]))
+        # 加载三维模型
+        # mesh = trimesh.load_mesh(path)
+        mesh = kal.rep.TriangleMesh.from_obj(path, enable_adjacency=True)
+        vertices = mesh.vertices
+        # mesh.face_textures
+        return vertices

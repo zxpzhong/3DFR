@@ -131,7 +131,7 @@ def batch_L2_distance(feature1, feature2):
 
 from tqdm import tqdm
 # 1表示同类，0表示异类
-def calc_eer(distances, label):
+def calc_eer(distances, label, threshold_list = None):
     '''
     计算等误率
     :param distances:  余弦距离矩阵，[batch_size]
@@ -140,15 +140,16 @@ def calc_eer(distances, label):
     '''
     # 将tensor转化为numpy
     distances_np = np.array(distances)
-    label_np = np.array(label.cpu())
+    label_np = np.array(label)
 
-    batch_size = label.size(0)
+    batch_size = label_np.shape[0]
     minV = 100
     bestThresh = 0
 
     max_dist = np.max(distances_np)
     min_dist = np.min(distances_np)
-    threshold_list = np.linspace(min_dist, max_dist, num=100)
+    if not threshold_list:
+        threshold_list = np.linspace(min_dist, max_dist, num=100)
 
     intra_cnt_final = 0
     inter_cnt_final = 0

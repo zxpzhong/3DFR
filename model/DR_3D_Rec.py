@@ -1,3 +1,6 @@
+'''
+Differential Renderer based 3D Reconstrction
+'''
 from numpy.matrixlib.defmatrix import matrix
 from torch import embedding
 import torch

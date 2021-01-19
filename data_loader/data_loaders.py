@@ -5,7 +5,7 @@ from base import BaseDataLoader
 dataloader import from data_loader dir
 '''
 from data_loader.Verificaiotn_DataLoader import Verificaiotn_DataLoader
-from data_loader.LFMB_3DFB_Pictures_Seged_Rectified import LFMB_3DFB_Pictures_Seged_Rectified
+from data_loader.LFMB_3DFB_Pictures_Seged_Rectified import LFMB_3DFB_Pictures_Seged_Rectified_Train,LFMB_3DFB_Pictures_Seged_Rectified_Test
 '''
 MnistDataLoader++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 '''

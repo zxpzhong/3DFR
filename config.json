@@ -1,15 +1,15 @@
 {
-    "name": "pytorch3duvmap",
+    "name": "point",
     "n_gpu": "2",
 
     "arch": {
-        "type": "DR_3D_Model",
+        "type": "DR_FR_Model",
         "args": {
-            "num_classes":1
+            "num_classes":347
         }
     },
     "train_data_loader": {
-        "type": "LFMB_3DFB_Pictures_Seged_Rectified",
+        "type": "LFMB_3DFB_Pictures_Seged_Rectified_Train",
         "args":{
             "data_dir": "/home/zf/vscode/3d/DR_3DFM/data/train_file_forever.csv",
             "batch_size": 4,
@@ -19,21 +19,21 @@
         }
     },
     "valid_data_loader": {
-        "type": "LFMB_3DFB_Pictures_Seged_Rectified",
+        "type": "LFMB_3DFB_Pictures_Seged_Rectified_Test",
         "args":{
             "data_dir": "/home/zf/vscode/3d/DR_3DFM/data/valid_file_forever.csv",
             "batch_size": 4,
-            "shuffle": true,
+            "shuffle": false,
             "validation_split": 0,
             "num_workers": 2
         }
     },
     "test_data_loader": {
-        "type": "LFMB_3DFB_Pictures_Seged_Rectified",
+        "type": "LFMB_3DFB_Pictures_Seged_Rectified_Test",
         "args":{
             "data_dir": "/home/zf/vscode/3d/DR_3DFM/data/test_file_forever.csv",
             "batch_size": 4,
-            "shuffle": true,
+            "shuffle": false,
             "validation_split": 0,
             "num_workers": 2
         }
@@ -48,7 +48,6 @@
     },
     "loss": "L2",
     "metrics": [
-        "accuracy", "top_k_acc"
     ],
     "lr_scheduler": {
         "type": "StepLR",
