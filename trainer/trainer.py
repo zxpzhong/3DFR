@@ -36,7 +36,7 @@ class Trainer(BaseTrainer):
         self.test_data_loader = test_data_loader
         self.do_validation = self.valid_data_loader is not None
         self.lr_scheduler = lr_scheduler
-        self.log_step = 50*int(np.sqrt(data_loader.batch_size))
+        self.log_step = 10*int(np.sqrt(data_loader.batch_size))
 
         self.train_metrics = MetricTracker('loss','loss_cls','acc', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
         self.valid_metrics = MetricTracker('loss','valid_eer','test_eer', *[m.__name__ for m in self.metric_ftns], writer=self.writer)
@@ -68,7 +68,7 @@ class Trainer(BaseTrainer):
             loss.backward()
             self.optimizer.step()
             # log
-            if batch_idx % self.log_step == 0:
+            if batch_idx > 0 and batch_idx % self.log_step == 0:
                 # 写入当前step
                 step = (epoch - 1) * self.len_epoch + batch_idx
                 self.writer.set_step(step)
@@ -104,14 +104,14 @@ class Trainer(BaseTrainer):
         self.model.eval()
         self.valid_metrics.reset()
         # 使用当前模型跑完整个验证集
-        features = []
+        features = {}
         with torch.no_grad():
-            for batch_idx, (data) in enumerate(tqdm(self.valid_data_loader)):
+            for batch_idx, (data,name) in enumerate(tqdm(self.valid_data_loader)):
                 data = data.to(self.device)
                 output,_ = self.model(data)
                 output = output.cpu()
                 for i in range(output.shape[0]):
-                    features.append(output[i])
+                    features[name[i]] = output[i]
         
         # 使用遍历取得EER阈值
         # 构建distances和label列表
@@ -128,14 +128,14 @@ class Trainer(BaseTrainer):
         self.logger.debug("intra_cnt is : {} , inter_cnt is {} , intra_len is {} , inter_len is {}".format(intra_cnt_final,inter_cnt_final,intra_len_final,inter_len_final))
         
         # 遍历测试集,获取所有特征
-        features = []
+        features = {}
         with torch.no_grad():
-            for batch_idx, (data) in enumerate(tqdm(self.test_data_loader)):
+            for batch_idx, (data,name) in enumerate(tqdm(self.test_data_loader)):
                 data = data.to(self.device)
                 output,_ = self.model(data)
                 output = output.cpu()
                 for i in range(output.shape[0]):
-                    features.append(output[i])
+                    features[name[i]] = output[i]
         distances = []
         label = []
         for item in self.test_data_loader.dataset.query:

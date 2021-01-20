@@ -112,9 +112,10 @@ class Train_Dataset(torch.utils.data.Dataset):
         handle = open(train_file)
         lines = handle.readlines()
         self.prefixs = [item.split(',')[2] for item in lines[1:]]
+        self.prefixs.sort()
         self.labels = [item.split(',')[3] for item in lines[1:]]
         
-        # self.prefixs.sort()
+        
         # self.prefixs = ['0001_2_01']
         # 构建label
         pass
@@ -141,12 +142,13 @@ class Test_Dataset(torch.utils.data.Dataset):
         lines = handle.readlines()
         
         self.prefixs = list(set([item.split(',')[2] for item in lines[1:]]+[item.split(',')[3] for item in lines[1:]]))
+        self.prefixs.sort()
         self.labels = [item.split(',')[4] for item in lines[1:]]
         
         # 构建查询表
-        self.query = [[self.prefixs.index(item.split(',')[2]),self.prefixs.index(item.split(',')[3]),int(item.split(',')[4])] for item in lines[1:]]
+        self.query = [[item.split(',')[2],item.split(',')[3],int(item.split(',')[4])] for item in lines[1:]]
         
-        # self.prefixs.sort()
+        
         # self.prefixs = ['0001_2_01']
         # 构建label
         pass
@@ -162,4 +164,4 @@ class Test_Dataset(torch.utils.data.Dataset):
         mesh = kal.rep.TriangleMesh.from_obj(path, enable_adjacency=True)
         vertices = mesh.vertices
         # mesh.face_textures
-        return vertices
+        return vertices,self.prefixs[index]

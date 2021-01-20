@@ -33,7 +33,7 @@ class DR_FR_Model(nn.Module):
         self.f_dim = f_dim
         self.point_num = point_num
         self.num_classes = num_classes
-        self.model = PointNetClassifier(num_classes=self.num_classes)
+        self.model = PointNetClassifier(num_classes=self.num_classes,classifier_layer_dims = [1024, 512], feat_layer_dims = [32,128,512])
         
     def forward(self, point):
         '''
