@@ -21,6 +21,7 @@ import math
 
 # pointnet
 from kaolin.models.PointNet import PointNetClassifier
+from kaolin.models import MeshCNNClassifier
 
 class DR_FR_Model(nn.Module):
     r"""Differential Renderer based Finger Recognition
@@ -33,12 +34,12 @@ class DR_FR_Model(nn.Module):
         self.f_dim = f_dim
         self.point_num = point_num
         self.num_classes = num_classes
-        self.model = PointNetClassifier(num_classes=self.num_classes,classifier_layer_dims = [1024, 512], feat_layer_dims = [32,128,512])
+        self.model = MeshCNNClassifier(5, self.num_classes, [16, 32, 32], [1140, 780, 580], 100, 0, 750)
         
-    def forward(self, point):
+    def forward(self, mesh):
         '''
         输入: 点云 N*3
         输出: logit
         '''
-        feature,logit = self.model(point)
+        feature,logit = self.model(mesh)
         return feature,logit

@@ -53,7 +53,8 @@ class Trainer(BaseTrainer):
         
         sum_ = 0
         right_ = 0
-        for batch_idx, (data, target) in enumerate(tqdm(self.data_loader)):
+        for batch_idx, (data,target) in enumerate(tqdm(self.data_loader)):
+            
             data = data.to(self.device)
             target = target.to(self.device)
             self.optimizer.zero_grad()

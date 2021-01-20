@@ -106,6 +106,50 @@ transform_notrans = T.Compose([
     # T.Normalize([0.5], [0.5]),  # 标准化至[-1, 1]，规定均值和标准差
 ])
 
+
+
+def prepare_mesh(mesh):
+    mesh.vertex_mask = torch.ones(mesh.vertices.shape[0]).to(mesh.vertices)
+    _, face_areas = kal.models.meshcnn.compute_face_normals_and_areas(mesh)
+    (
+        edge2key,
+        edges,
+        vv,
+        vv_count,
+        ve,
+        ve_count,
+        vf,
+        vf_count,
+        ff,
+        ff_count,
+        ee,
+        ee_count,
+        ef,
+        ef_count,
+    ) = kal.rep.Mesh.compute_adjacency_info(mesh.vertices, mesh.faces)
+
+    mesh.edges = edges
+    mesh.ve = ve
+    mesh.ve_count = ve_count
+    mesh.ee = ee
+    mesh.ee_count = ee_count
+
+    kal.models.meshcnn.build_gemm_representation(mesh, face_areas)
+    edge_points = kal.models.meshcnn.get_edge_points_vectorized(mesh)
+    kal.models.meshcnn.set_edge_lengths(mesh, edge_points)
+    kal.models.meshcnn.extract_meshcnn_features(mesh, edge_points)
+    mesh.edges_count = mesh.edges.shape[-2]
+    mesh.pool_count = 0
+
+    mesh.edges = mesh.edges.numpy()
+    mesh.faces = mesh.faces.numpy()
+    mesh.ve = list(mesh.ve.numpy())
+    mesh.ve = [
+        list([ve[j] for j in range(mesh.ve_count[i])]) for i, ve in enumerate(mesh.ve)
+    ]
+
+    return mesh
+
 class Train_Dataset(torch.utils.data.Dataset):
     def __init__(self,root,train_file):
         self.root = root
@@ -130,9 +174,10 @@ class Train_Dataset(torch.utils.data.Dataset):
         # mesh = trimesh.load_mesh(path)
         mesh = kal.rep.TriangleMesh.from_obj(path, enable_adjacency=True)
         vertices = mesh.vertices
-        vertices = augment_data(vertices)
+        mesh.vertices = torch.Tensor(np.float32(augment_data(vertices)))
+        mesh = prepare_mesh(mesh)
         # mesh.face_textures
-        return np.float32(vertices),int(self.labels[index])
+        return mesh,int(self.labels[index])
 
 
 class Test_Dataset(torch.utils.data.Dataset):
@@ -162,6 +207,9 @@ class Test_Dataset(torch.utils.data.Dataset):
         # 加载三维模型
         # mesh = trimesh.load_mesh(path)
         mesh = kal.rep.TriangleMesh.from_obj(path, enable_adjacency=True)
-        vertices = mesh.vertices
+        # vertices = mesh.vertices
+        # mesh.vertices = torch.Tensor(np.float32(augment_data(vertices)))
+        # mesh = prepare_mesh(mesh)
         # mesh.face_textures
-        return vertices,self.prefixs[index]
+        return mesh,int(self.labels[index])
+    
